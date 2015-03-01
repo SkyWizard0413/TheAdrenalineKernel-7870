@@ -818,8 +818,13 @@ static void bpf_release_orig_filter(struct bpf_prog *fp)
 
 static void __bpf_prog_release(struct bpf_prog *prog)
 {
-	bpf_release_orig_filter(prog);
-	bpf_prog_free(prog);
+
+	if (prog->type == BPF_PROG_TYPE_SOCKET_FILTER) {
+		bpf_prog_put(prog);
+	} else {
+		bpf_release_orig_filter(prog);
+		bpf_prog_free(prog);
+	}
 }
 
 static void __sk_filter_release(struct sk_filter *fp)
@@ -1067,6 +1072,11 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 	prog = bpf_prepare_filter(prog);
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);
+
+	if (prog->type != BPF_PROG_TYPE_SOCKET_FILTER) {
+		bpf_prog_put(prog);
+		return -EINVAL;
+	}
 
 	fp = kmalloc(sizeof(*fp), GFP_KERNEL);
 	if (!fp) {
