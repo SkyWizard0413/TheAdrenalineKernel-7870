@@ -854,6 +854,11 @@ static int check_call(struct verifier_env *env, int func_id)
 		return -EINVAL;
 	}
 
+	if (!may_access_skb(env->prog->aux->prog_type)) {
+		verbose("BPF_LD_ABS|IND instructions not allowed for this program type\n");
+		return -EINVAL;
+	}
+	
 	/* eBPF programs must be GPL compatible to use GPL-ed functions */
 	if (!env->prog->aux->is_gpl_compatible && fn->gpl_only) {
 		verbose("cannot call GPL only function from proprietary program\n");
@@ -1184,6 +1189,17 @@ static int check_ld_imm(struct verifier_env *env, struct bpf_insn *insn)
 	regs[insn->dst_reg].type = CONST_PTR_TO_MAP;
 	regs[insn->dst_reg].map_ptr = ld_imm64_to_map_ptr(insn);
 	return 0;
+}
+
+static bool may_access_skb(enum bpf_prog_type type)
+{
+	switch (type) {
+	case BPF_PROG_TYPE_SOCKET_FILTER:
+	case BPF_PROG_TYPE_SCHED_CLS:
+		return true;
+	default:
+		return false;
+	}
 }
 
 /* non-recursive DFS pseudo code
