@@ -1073,8 +1073,8 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 		__bpf_prog_release(prog);
 		return -ENOMEM;
 	}
+	
 	fp->prog = prog;
-
 	atomic_set(&fp->refcnt, 0);
 
 	if (!sk_filter_charge(sk, fp)) {
@@ -1091,6 +1091,45 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 
 	return 0;
 }
+
+static const struct bpf_func_proto *
+sk_filter_func_proto(enum bpf_func_id func_id)
+{
+	switch (func_id) {
+	case BPF_FUNC_map_lookup_elem:
+		return &bpf_map_lookup_elem_proto;
+	case BPF_FUNC_map_update_elem:
+		return &bpf_map_update_elem_proto;
+	case BPF_FUNC_map_delete_elem:
+		return &bpf_map_delete_elem_proto;
+	default:
+		return NULL;
+	}
+}
+
+static bool sk_filter_is_valid_access(int off, int size,
+				      enum bpf_access_type type)
+{
+	/* skb fields cannot be accessed yet */
+	return false;
+}
+static const struct bpf_verifier_ops sk_filter_ops = {
+	.get_func_proto = sk_filter_func_proto,
+	.is_valid_access = sk_filter_is_valid_access,
+};
+
+static struct bpf_prog_type_list sk_filter_type __read_mostly = {
+	.ops = &sk_filter_ops,
+	.type = BPF_PROG_TYPE_SOCKET_FILTER,
+};
+
+static int __init register_sk_filter_ops(void)
+{
+	bpf_register_prog_type(&sk_filter_type);
+	return 0;
+}
+late_initcall(register_sk_filter_ops);
+
 EXPORT_SYMBOL_GPL(sk_attach_filter);
 
 int sk_detach_filter(struct sock *sk)
